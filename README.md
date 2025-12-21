@@ -23,10 +23,22 @@ git clone https://github.com/Nonieo/retrosavesync.git
 cd retrosavesync
 ```
 
-2. Make the script executable (optional):
+2. Make the scripts executable (optional):
 ```bash
-chmod +x retrosavesync.py
+chmod +x retrosavesync.py quickstart.sh
 ```
+
+## Quick Start
+
+For an interactive setup and sync experience, run:
+```bash
+./quickstart.sh
+```
+
+This script will help you:
+- Create a configuration file if one doesn't exist
+- Test your configuration with a dry run
+- Sync your saves
 
 ## Configuration
 
