@@ -103,11 +103,19 @@ python3 retrosavesync.py -e dolphin
 python3 retrosavesync.py -c /path/to/config.json
 ```
 
+### Dry Run Mode
+
+Test your configuration without making any changes:
+
+```bash
+python3 retrosavesync.py --dry-run
+```
+
 ### Command Line Options
 
 - `-c, --config`: Path to configuration file (default: config.json)
 - `-e, --emulator`: Emulator to sync - choices: all, pcsx2, dolphin (default: all)
-- `--dry-run`: Show what would be synced without actually syncing (planned feature)
+- `--dry-run`: Show what would be synced without actually syncing
 
 ## How It Works
 

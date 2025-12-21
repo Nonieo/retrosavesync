@@ -19,14 +19,16 @@ from typing import Dict, List, Tuple
 class SaveSync:
     """Handles synchronization of save files between local and NAS storage."""
     
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, dry_run: bool = False):
         """Initialize SaveSync with configuration file.
         
         Args:
             config_path: Path to JSON configuration file
+            dry_run: If True, only show what would be synced without actually syncing
         """
         self.config = self._load_config(config_path)
         self.nas_path = Path(self.config['nas_path']).expanduser()
+        self.dry_run = dry_run
         self.sync_stats = {
             'uploaded': 0,
             'downloaded': 0,
@@ -110,17 +112,23 @@ class SaveSync:
         
         try:
             if direction == 'upload':
-                # Ensure NAS directory exists
-                nas_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(local_path, nas_path)
-                print(f"  ↑ Uploaded: {local_path.name}")
+                if self.dry_run:
+                    print(f"  [DRY RUN] Would upload: {local_path.name}")
+                else:
+                    # Ensure NAS directory exists
+                    nas_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(local_path, nas_path)
+                    print(f"  ↑ Uploaded: {local_path.name}")
                 self.sync_stats['uploaded'] += 1
                 return True
             elif direction == 'download':
-                # Ensure local directory exists
-                local_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(nas_path, local_path)
-                print(f"  ↓ Downloaded: {local_path.name}")
+                if self.dry_run:
+                    print(f"  [DRY RUN] Would download: {local_path.name}")
+                else:
+                    # Ensure local directory exists
+                    local_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(nas_path, local_path)
+                    print(f"  ↓ Downloaded: {local_path.name}")
                 self.sync_stats['downloaded'] += 1
                 return True
         except Exception as e:
@@ -232,17 +240,23 @@ class SaveSync:
     def sync_all(self) -> None:
         """Sync all enabled emulators."""
         print("=" * 60)
-        print("RetroSaveSync - Starting synchronization")
+        if self.dry_run:
+            print("RetroSaveSync - DRY RUN MODE (no files will be changed)")
+        else:
+            print("RetroSaveSync - Starting synchronization")
         print("=" * 60)
         
         # Ensure NAS path exists
         if not self.nas_path.exists():
-            print(f"\nCreating NAS directory: {self.nas_path}")
-            try:
-                self.nas_path.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                print(f"Error creating NAS directory: {e}")
-                return
+            if self.dry_run:
+                print(f"\n[DRY RUN] Would create NAS directory: {self.nas_path}")
+            else:
+                print(f"\nCreating NAS directory: {self.nas_path}")
+                try:
+                    self.nas_path.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    print(f"Error creating NAS directory: {e}")
+                    return
         
         # Sync each emulator
         emulators = self.config.get('emulators', {})
@@ -294,7 +308,7 @@ def main():
         sys.exit(1)
     
     try:
-        syncer = SaveSync(args.config)
+        syncer = SaveSync(args.config, dry_run=args.dry_run)
         
         if args.emulator == 'all':
             syncer.sync_all()
