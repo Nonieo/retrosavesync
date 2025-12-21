@@ -1,0 +1,19 @@
+{
+  "nas_path": "/path/to/nas/retro_saves",
+  "emulators": {
+    "pcsx2": {
+      "enabled": true,
+      "save_path": "~/.config/PCSX2/memcards",
+      "description": "PCSX2 (PS2) save files"
+    },
+    "dolphin": {
+      "enabled": true,
+      "save_path": "~/.local/share/dolphin-emu",
+      "saves": {
+        "wii": "Wii",
+        "gamecube": "GC"
+      },
+      "description": "Dolphin (Wii/GameCube) save files"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# RetroSaveSync Python Requirements
+# This tool uses only Python standard library modules.
+# Python 3.6+ is required.
+
+# No external dependencies are needed for basic functionality.
+# The following modules from the standard library are used:
+# - os
+# - sys
+# - json
+# - shutil
+# - argparse
+# - pathlib
+# - datetime
+# - typing
