@@ -13,7 +13,7 @@ import shutil
 import argparse
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 
 class SaveSync:
@@ -138,7 +138,7 @@ class SaveSync:
             return False
     
     def _sync_file(self, local_path: Path, nas_path: Path, direction: str = 'auto',
-                   emulator: str = None) -> bool:
+                   emulator: Optional[str] = None) -> bool:
         """Sync a single file between local and NAS.
         
         Args:
@@ -210,7 +210,7 @@ class SaveSync:
     
     def _sync_directory(self, local_dir: Path, nas_dir: Path, 
                        recursive: bool = True, extensions: List[str] = None,
-                       emulator: str = None) -> None:
+                       emulator: Optional[str] = None) -> None:
         """Sync all files in a directory between local and NAS.
         
         Args:
