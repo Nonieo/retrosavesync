@@ -1,5 +1,10 @@
 {
   "nas_path": "/path/to/nas/retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
   "emulators": {
     "pcsx2": {
       "enabled": true,
