@@ -478,7 +478,15 @@ class SaveSync:
     
     def _init_prompt_and_sync(self, name: str, local_path: Path, nas_path: Path, 
                               local_files: set, nas_files: set) -> None:
-        """Prompt user and perform initial sync for an emulator."""
+        """Prompt user and perform initial sync for an emulator.
+        
+        Args:
+            name: Display name for the emulator (e.g., 'PCSX2', 'Dolphin (Wii)')
+            local_path: Path to local save directory
+            nas_path: Path to NAS save directory
+            local_files: Set of relative paths to local files
+            nas_files: Set of relative paths to NAS files
+        """
         print(f"\n{name}:")
         print(f"  Local: {local_path}")
         print(f"  NAS:   {nas_path}")
@@ -499,11 +507,16 @@ class SaveSync:
             print("    3) Smart sync (use newer files, recommended)")
             print("    4) Skip this emulator")
             
-            try:
-                choice = input("\n  Enter choice (1-4): ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\n  Skipped.")
-                return
+            choice = None
+            while choice not in ['1', '2', '3', '4']:
+                try:
+                    choice = input("\n  Enter choice (1-4): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n  Skipped.")
+                    return
+                
+                if choice not in ['1', '2', '3', '4']:
+                    print(f"  Invalid choice '{choice}'. Please enter 1, 2, 3, or 4.")
             
             if choice == '1':
                 direction = 'upload'
@@ -514,7 +527,7 @@ class SaveSync:
             elif choice == '3':
                 direction = 'auto'
                 print(f"  → Will sync based on file timestamps")
-            else:
+            else:  # choice == '4'
                 print("  Skipped.")
                 return
         elif local_count > 0:
@@ -526,7 +539,10 @@ class SaveSync:
         
         # Perform the sync
         all_files = local_files | nas_files
-        emulator_name = name.split('(')[0].strip()  # Extract emulator name
+        
+        # Extract base emulator name for backup organization
+        # Handles formats like 'PCSX2' or 'Dolphin (Wii)' -> 'Dolphin'
+        emulator_name = name.split('(')[0].strip() if '(' in name else name
         
         for rel_path in sorted(all_files):
             local_file = local_path / rel_path
