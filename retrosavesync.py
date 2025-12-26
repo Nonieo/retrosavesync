@@ -394,6 +394,144 @@ class SaveSync:
         print(f"  Backed up: {self.sync_stats['backed_up']}")
         print(f"  Errors: {self.sync_stats['errors']}")
         print("=" * 60)
+    
+    def initialize(self) -> None:
+        """Interactive initialization for users with pre-existing saves."""
+        print("=" * 60)
+        print("RetroSaveSync - Initial Setup Wizard")
+        print("=" * 60)
+        print("\nThis wizard will help you set up RetroSaveSync with your")
+        print("existing save files.\n")
+        
+        # Check what exists
+        emulators = self.config.get('emulators', {})
+        
+        print("Scanning for existing saves...\n")
+        
+        for emu_name, emu_config in emulators.items():
+            if not emu_config.get('enabled', False):
+                continue
+            
+            if emu_name == 'pcsx2':
+                self._init_emulator_pcsx2(emu_config)
+            elif emu_name == 'dolphin':
+                self._init_emulator_dolphin(emu_config)
+        
+        print("\n" + "=" * 60)
+        print("Initialization complete!")
+        print("\nYou can now run 'python3 retrosavesync.py' to sync your saves.")
+        print("=" * 60)
+    
+    def _init_emulator_pcsx2(self, config: Dict) -> None:
+        """Initialize PCSX2 saves."""
+        local_path = Path(config['save_path']).expanduser()
+        nas_path = self.nas_path / 'PCSX2'
+        
+        local_files = set()
+        nas_files = set()
+        
+        if local_path.exists():
+            local_files = {f.relative_to(local_path) for f in local_path.rglob('*') if f.is_file()}
+        
+        if nas_path.exists():
+            nas_files = {f.relative_to(nas_path) for f in nas_path.rglob('*') if f.is_file()}
+        
+        self._init_prompt_and_sync('PCSX2', local_path, nas_path, local_files, nas_files)
+    
+    def _init_emulator_dolphin(self, config: Dict) -> None:
+        """Initialize Dolphin saves."""
+        base_path = Path(config['save_path']).expanduser()
+        nas_base = self.nas_path / 'Dolphin'
+        saves_config = config.get('saves', {})
+        
+        # Handle Wii saves
+        if 'wii' in saves_config:
+            wii_local = base_path / saves_config['wii']
+            wii_nas = nas_base / 'Wii'
+            
+            local_files = set()
+            nas_files = set()
+            
+            if wii_local.exists():
+                local_files = {f.relative_to(wii_local) for f in wii_local.rglob('*') if f.is_file()}
+            
+            if wii_nas.exists():
+                nas_files = {f.relative_to(wii_nas) for f in wii_nas.rglob('*') if f.is_file()}
+            
+            self._init_prompt_and_sync('Dolphin (Wii)', wii_local, wii_nas, local_files, nas_files)
+        
+        # Handle GameCube saves
+        if 'gamecube' in saves_config:
+            gc_local = base_path / saves_config['gamecube']
+            gc_nas = nas_base / 'GC'
+            
+            local_files = set()
+            nas_files = set()
+            
+            if gc_local.exists():
+                local_files = {f.relative_to(gc_local) for f in gc_local.rglob('*') if f.is_file()}
+            
+            if gc_nas.exists():
+                nas_files = {f.relative_to(gc_nas) for f in gc_nas.rglob('*') if f.is_file()}
+            
+            self._init_prompt_and_sync('Dolphin (GameCube)', gc_local, gc_nas, local_files, nas_files)
+    
+    def _init_prompt_and_sync(self, name: str, local_path: Path, nas_path: Path, 
+                              local_files: set, nas_files: set) -> None:
+        """Prompt user and perform initial sync for an emulator."""
+        print(f"\n{name}:")
+        print(f"  Local: {local_path}")
+        print(f"  NAS:   {nas_path}")
+        
+        local_count = len(local_files)
+        nas_count = len(nas_files)
+        
+        if local_count == 0 and nas_count == 0:
+            print(f"  Status: No saves found in either location")
+            return
+        
+        print(f"  Found: {local_count} local save(s), {nas_count} NAS save(s)")
+        
+        if local_count > 0 and nas_count > 0:
+            print("\n  Both locations have saves. Choose initial sync direction:")
+            print("    1) Use local saves (upload to NAS, overwrite NAS)")
+            print("    2) Use NAS saves (download to local, overwrite local)")
+            print("    3) Smart sync (use newer files, recommended)")
+            print("    4) Skip this emulator")
+            
+            try:
+                choice = input("\n  Enter choice (1-4): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\n  Skipped.")
+                return
+            
+            if choice == '1':
+                direction = 'upload'
+                print(f"  → Will upload {local_count} file(s) to NAS")
+            elif choice == '2':
+                direction = 'download'
+                print(f"  → Will download {nas_count} file(s) from NAS")
+            elif choice == '3':
+                direction = 'auto'
+                print(f"  → Will sync based on file timestamps")
+            else:
+                print("  Skipped.")
+                return
+        elif local_count > 0:
+            print(f"  → Will upload {local_count} file(s) to NAS")
+            direction = 'upload'
+        else:
+            print(f"  → Will download {nas_count} file(s) from NAS")
+            direction = 'download'
+        
+        # Perform the sync
+        all_files = local_files | nas_files
+        emulator_name = name.split('(')[0].strip()  # Extract emulator name
+        
+        for rel_path in sorted(all_files):
+            local_file = local_path / rel_path
+            nas_file = nas_path / rel_path
+            self._sync_file(local_file, nas_file, direction=direction, emulator=emulator_name)
 
 
 def main():
@@ -422,6 +560,11 @@ def main():
         action='store_true',
         help='Create monthly backups without syncing'
     )
+    parser.add_argument(
+        '--init',
+        action='store_true',
+        help='Interactive setup wizard for first-time use with existing saves'
+    )
     
     args = parser.parse_args()
     
@@ -434,7 +577,9 @@ def main():
     try:
         syncer = SaveSync(args.config, dry_run=args.dry_run)
         
-        if args.backup_only:
+        if args.init:
+            syncer.initialize()
+        elif args.backup_only:
             syncer.create_backups()
         elif args.emulator == 'all':
             syncer.sync_all()

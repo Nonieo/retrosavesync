@@ -32,6 +32,26 @@ chmod +x retrosavesync.py quickstart.sh
 
 ## Quick Start
 
+### First-Time Setup with Existing Saves
+
+If you already have save files on your local system or NAS, use the initialization wizard:
+
+```bash
+# 1. Create your configuration
+cp config.example.json config.json
+# Edit config.json with your paths
+
+# 2. Run the interactive setup wizard
+python3 retrosavesync.py --init
+```
+
+The wizard will:
+- Detect existing saves on both local and NAS locations
+- Let you choose which saves to use as the baseline
+- Perform the initial sync based on your preferences
+
+### Interactive Quick Start
+
 For an interactive setup and sync experience, run:
 ```bash
 ./quickstart.sh
@@ -126,6 +146,19 @@ python3 retrosavesync.py -e dolphin
 python3 retrosavesync.py -c /path/to/config.json
 ```
 
+### First-Time Initialization
+
+Use the interactive wizard when setting up for the first time with existing saves:
+
+```bash
+python3 retrosavesync.py --init
+```
+
+This will:
+- Scan for existing saves on local and NAS
+- Ask which location to use as the baseline
+- Perform initial sync based on your choice
+
 ### Dry Run Mode
 
 Test your configuration without making any changes:
@@ -140,6 +173,7 @@ python3 retrosavesync.py --dry-run
 - `-e, --emulator`: Emulator to sync - choices: all, pcsx2, dolphin (default: all)
 - `--dry-run`: Show what would be synced without actually syncing
 - `--backup-only`: Create monthly backups without syncing
+- `--init`: Interactive setup wizard for first-time use with existing saves
 
 ### Monthly Backups
 

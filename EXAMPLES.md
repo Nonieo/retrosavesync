@@ -4,7 +4,7 @@ This document provides practical examples for common use cases.
 
 ## Basic Usage Examples
 
-### First Time Setup
+### First Time Setup (New User)
 
 ```bash
 # 1. Clone and enter the repository
@@ -23,6 +23,61 @@ python3 retrosavesync.py --dry-run
 
 # 5. Perform actual sync
 python3 retrosavesync.py
+```
+
+### First Time Setup (With Existing Saves)
+
+If you already have save files on your local system or NAS:
+
+```bash
+# 1. Clone and enter the repository
+git clone https://github.com/Nonieo/retrosavesync.git
+cd retrosavesync
+
+# 2. Create your configuration
+cp config.example.json config.json
+
+# 3. Edit config.json with your paths
+# Update nas_path to point to your NAS
+# Update save_path for each emulator
+
+# 4. Run the interactive initialization wizard
+python3 retrosavesync.py --init
+```
+
+The wizard will:
+- Scan both local and NAS locations for existing saves
+- Show you what it found in each location
+- Let you choose how to handle conflicts:
+  - **Option 1**: Use local saves (upload to NAS, overwrite NAS)
+  - **Option 2**: Use NAS saves (download to local, overwrite local)  
+  - **Option 3**: Smart sync (use newer files based on timestamps, recommended)
+  - **Option 4**: Skip this emulator
+
+Example output:
+```
+============================================================
+RetroSaveSync - Initial Setup Wizard
+============================================================
+
+Scanning for existing saves...
+
+PCSX2:
+  Local: /home/user/.config/PCSX2/memcards
+  NAS:   /mnt/nas/retro_saves/PCSX2
+  Found: 3 local save(s), 2 NAS save(s)
+
+  Both locations have saves. Choose initial sync direction:
+    1) Use local saves (upload to NAS, overwrite NAS)
+    2) Use NAS saves (download to local, overwrite local)
+    3) Smart sync (use newer files, recommended)
+    4) Skip this emulator
+
+  Enter choice (1-4): 3
+  → Will sync based on file timestamps
+  ↑ Uploaded: Mcd001.ps2
+  ↑ Uploaded: Mcd003.ps2
+  ↓ Downloaded: Mcd002.ps2
 ```
 
 ### Daily Sync Workflow
