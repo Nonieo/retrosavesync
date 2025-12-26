@@ -90,10 +90,16 @@ class SaveSync:
         Returns:
             True if backup was created, False otherwise
         """
+        # Check if backups are enabled and monthly backups are configured
+        # monthly_backups allows for future extensibility (e.g., daily/weekly backups)
         if not self.backup_enabled or not self.monthly_backups:
             return False
         
         if not nas_file.exists():
+            return False
+        
+        # Validate emulator parameter
+        if not emulator:
             return False
         
         # Get current year-month for backup directory
