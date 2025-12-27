@@ -4,7 +4,7 @@ This document provides practical examples for common use cases.
 
 ## Basic Usage Examples
 
-### First Time Setup
+### First Time Setup (New User)
 
 ```bash
 # 1. Clone and enter the repository
@@ -25,6 +25,61 @@ python3 retrosavesync.py --dry-run
 python3 retrosavesync.py
 ```
 
+### First Time Setup (With Existing Saves)
+
+If you already have save files on your local system or NAS:
+
+```bash
+# 1. Clone and enter the repository
+git clone https://github.com/Nonieo/retrosavesync.git
+cd retrosavesync
+
+# 2. Create your configuration
+cp config.example.json config.json
+
+# 3. Edit config.json with your paths
+# Update nas_path to point to your NAS
+# Update save_path for each emulator
+
+# 4. Run the interactive initialization wizard
+python3 retrosavesync.py --init
+```
+
+The wizard will:
+- Scan both local and NAS locations for existing saves
+- Show you what it found in each location
+- Let you choose how to handle conflicts:
+  - **Option 1**: Use local saves (upload to NAS, overwrite NAS)
+  - **Option 2**: Use NAS saves (download to local, overwrite local)  
+  - **Option 3**: Smart sync (use newer files based on timestamps, recommended)
+  - **Option 4**: Skip this emulator
+
+Example output:
+```
+============================================================
+RetroSaveSync - Initial Setup Wizard
+============================================================
+
+Scanning for existing saves...
+
+PCSX2:
+  Local: /home/user/.config/PCSX2/memcards
+  NAS:   /mnt/nas/retro_saves/PCSX2
+  Found: 3 local save(s), 2 NAS save(s)
+
+  Both locations have saves. Choose initial sync direction:
+    1) Use local saves (upload to NAS, overwrite NAS)
+    2) Use NAS saves (download to local, overwrite local)
+    3) Smart sync (use newer files, recommended)
+    4) Skip this emulator
+
+  Enter choice (1-4): 3
+  → Will sync based on file timestamps
+  ↑ Uploaded: Mcd001.ps2
+  ↑ Uploaded: Mcd003.ps2
+  ↓ Downloaded: Mcd002.ps2
+```
+
 ### Daily Sync Workflow
 
 ```bash
@@ -43,6 +98,11 @@ python3 retrosavesync.py
 ```json
 {
   "nas_path": "/mnt/nas/retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
   "emulators": {
     "pcsx2": {
       "enabled": true,
@@ -64,6 +124,11 @@ python3 retrosavesync.py
 ```json
 {
   "nas_path": "Z:\\retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
   "emulators": {
     "pcsx2": {
       "enabled": true,
@@ -85,6 +150,11 @@ python3 retrosavesync.py
 ```json
 {
   "nas_path": "/Volumes/NAS/retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
   "emulators": {
     "pcsx2": {
       "enabled": true,
@@ -103,6 +173,91 @@ python3 retrosavesync.py
 ```
 
 ## Advanced Examples
+
+### Monthly Backups
+
+Enable automatic monthly backups to preserve save file history:
+
+```json
+{
+  "nas_path": "/mnt/nas/retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
+  "emulators": {
+    "pcsx2": {
+      "enabled": true,
+      "save_path": "~/.config/PCSX2/memcards"
+    }
+  }
+}
+```
+
+When enabled, backups are automatically created before overwriting NAS files:
+
+```bash
+# Normal sync with backups enabled
+python3 retrosavesync.py
+
+# Output shows backup creation:
+# 💾 Backed up: Mcd001.ps2 -> backups/2025-12/
+# ↑ Uploaded: Mcd001.ps2
+```
+
+### Create Manual Backups
+
+Create backups of all NAS saves without syncing:
+
+```bash
+# Create monthly backups
+python3 retrosavesync.py --backup-only
+
+# Test backup creation first
+python3 retrosavesync.py --backup-only --dry-run
+```
+
+This is useful for:
+- Creating a monthly snapshot before major gaming sessions
+- Backing up saves before system updates
+- Preserving saves before configuration changes
+
+### Understanding Backup Structure
+
+Backups are organized by year-month and preserve the full directory structure:
+
+```
+/mnt/nas/retro_saves/
+├── PCSX2/                    # Current saves
+│   └── Mcd001.ps2
+├── Dolphin/                  # Current saves
+│   ├── Wii/
+│   │   └── MarioKart.bin
+│   └── GC/
+│       └── game.gci
+└── backups/                  # Historical backups
+    ├── 2025-11/              # November 2025 backups
+    │   ├── PCSX2/
+    │   │   └── Mcd001.ps2
+    │   └── Dolphin/
+    │       └── Wii/
+    │           └── MarioKart.bin
+    └── 2025-12/              # December 2025 backups
+        ├── PCSX2/
+        │   └── Mcd001.ps2
+        └── Dolphin/
+            ├── Wii/
+            │   └── MarioKart.bin
+            └── GC/
+                └── game.gci
+```
+
+**Key Points:**
+- Only one backup per file per month
+- Backups are created only when a file would be overwritten
+- Old backups are never automatically deleted
+- You can manually clean up old backups as needed
 
 ### Sync Only PCSX2
 

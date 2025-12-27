@@ -13,7 +13,7 @@ import shutil
 import argparse
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 
 class SaveSync:
@@ -33,8 +33,15 @@ class SaveSync:
             'uploaded': 0,
             'downloaded': 0,
             'skipped': 0,
-            'errors': 0
+            'errors': 0,
+            'backed_up': 0
         }
+        
+        # Load backup configuration
+        backup_config = self.config.get('backup', {})
+        self.backup_enabled = backup_config.get('enabled', False)
+        self.monthly_backups = backup_config.get('monthly_backups', True)
+        self.backup_path = Path(backup_config.get('backup_path', 'backups'))
     
     def _load_config(self, config_path: str) -> Dict:
         """Load and validate configuration from JSON file.
@@ -73,13 +80,72 @@ class SaveSync:
         except FileNotFoundError:
             return 0.0
     
-    def _sync_file(self, local_path: Path, nas_path: Path, direction: str = 'auto') -> bool:
+    def _create_monthly_backup(self, nas_file: Path, emulator: str) -> bool:
+        """Create a monthly backup of a NAS file.
+        
+        Args:
+            nas_file: Path to the NAS file
+            emulator: Emulator name (e.g., 'PCSX2', 'Dolphin')
+            
+        Returns:
+            True if backup was created, False otherwise
+        """
+        # Check if backups are enabled and monthly backups are configured
+        # monthly_backups allows for future extensibility (e.g., daily/weekly backups)
+        if not self.backup_enabled or not self.monthly_backups:
+            return False
+        
+        if not nas_file.exists():
+            return False
+        
+        # Validate emulator parameter
+        if not emulator:
+            return False
+        
+        # Get current year-month for backup directory
+        now = datetime.now()
+        backup_month = now.strftime('%Y-%m')
+        
+        # Create backup directory structure: nas_path/backups/YYYY-MM/emulator/
+        backup_dir = self.nas_path / self.backup_path / backup_month / emulator
+        
+        # Get relative path from emulator directory
+        emulator_base = self.nas_path / emulator
+        if nas_file.is_relative_to(emulator_base):
+            rel_path = nas_file.relative_to(emulator_base)
+        else:
+            # Fallback to just the filename
+            rel_path = nas_file.name
+        
+        backup_file = backup_dir / rel_path
+        
+        # Check if backup already exists for this month
+        if backup_file.exists():
+            return False
+        
+        try:
+            if self.dry_run:
+                print(f"  [DRY RUN] Would create backup: {backup_month}/{emulator}/{rel_path}")
+            else:
+                # Ensure backup directory exists
+                backup_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(nas_file, backup_file)
+                print(f"  💾 Backed up: {rel_path} -> backups/{backup_month}/")
+            self.sync_stats['backed_up'] += 1
+            return True
+        except Exception as e:
+            print(f"  ✗ Error creating backup for {nas_file.name}: {e}")
+            return False
+    
+    def _sync_file(self, local_path: Path, nas_path: Path, direction: str = 'auto',
+                   emulator: Optional[str] = None) -> bool:
         """Sync a single file between local and NAS.
         
         Args:
             local_path: Local file path
             nas_path: NAS file path
             direction: 'auto' (based on timestamp), 'upload', or 'download'
+            emulator: Emulator name for backup organization (e.g., 'PCSX2', 'Dolphin')
             
         Returns:
             True if sync was performed, False if skipped
@@ -112,6 +178,10 @@ class SaveSync:
         
         try:
             if direction == 'upload':
+                # Create backup of existing NAS file before overwriting
+                if nas_exists and emulator:
+                    self._create_monthly_backup(nas_path, emulator)
+                
                 if self.dry_run:
                     print(f"  [DRY RUN] Would upload: {local_path.name}")
                 else:
@@ -139,7 +209,8 @@ class SaveSync:
         return False
     
     def _sync_directory(self, local_dir: Path, nas_dir: Path, 
-                       recursive: bool = True, extensions: List[str] = None) -> None:
+                       recursive: bool = True, extensions: List[str] = None,
+                       emulator: Optional[str] = None) -> None:
         """Sync all files in a directory between local and NAS.
         
         Args:
@@ -147,6 +218,7 @@ class SaveSync:
             nas_dir: NAS directory path
             recursive: Whether to sync subdirectories recursively
             extensions: List of file extensions to sync (e.g., ['.ps2', '.gci'])
+            emulator: Emulator name for backup organization (e.g., 'PCSX2', 'Dolphin')
         """
         local_dir = local_dir.expanduser()
         
@@ -187,7 +259,7 @@ class SaveSync:
         for rel_path in sorted(all_files):
             local_file = local_dir / rel_path
             nas_file = nas_dir / rel_path
-            self._sync_file(local_file, nas_file)
+            self._sync_file(local_file, nas_file, emulator=emulator)
     
     def sync_pcsx2(self) -> None:
         """Sync PCSX2 (PS2) save files."""
@@ -205,7 +277,7 @@ class SaveSync:
         print(f"  NAS: {nas_path}")
         
         # Sync memory card files
-        self._sync_directory(local_path, nas_path, recursive=True)
+        self._sync_directory(local_path, nas_path, recursive=True, emulator='PCSX2')
     
     def sync_dolphin(self) -> None:
         """Sync Dolphin (Wii/GameCube) save files."""
@@ -228,14 +300,14 @@ class SaveSync:
             wii_local = base_path / saves_config['wii']
             wii_nas = nas_base / 'Wii'
             print(f"\n  Wii saves:")
-            self._sync_directory(wii_local, wii_nas, recursive=True)
+            self._sync_directory(wii_local, wii_nas, recursive=True, emulator='Dolphin')
         
         # Sync GameCube saves
         if 'gamecube' in saves_config:
             gc_local = base_path / saves_config['gamecube']
             gc_nas = nas_base / 'GC'
             print(f"\n  GameCube saves:")
-            self._sync_directory(gc_local, gc_nas, recursive=True)
+            self._sync_directory(gc_local, gc_nas, recursive=True, emulator='Dolphin')
     
     def sync_all(self) -> None:
         """Sync all enabled emulators."""
@@ -273,8 +345,209 @@ class SaveSync:
         print(f"  Uploaded: {self.sync_stats['uploaded']}")
         print(f"  Downloaded: {self.sync_stats['downloaded']}")
         print(f"  Skipped: {self.sync_stats['skipped']}")
+        if self.backup_enabled:
+            print(f"  Backed up: {self.sync_stats['backed_up']}")
         print(f"  Errors: {self.sync_stats['errors']}")
         print("=" * 60)
+    
+    def create_backups(self) -> None:
+        """Create monthly backups of all NAS saves without syncing."""
+        print("=" * 60)
+        if self.dry_run:
+            print("RetroSaveSync - BACKUP DRY RUN MODE")
+        else:
+            print("RetroSaveSync - Creating monthly backups")
+        print("=" * 60)
+        
+        if not self.backup_enabled:
+            print("\nBackup is disabled in configuration.")
+            print("Enable it by setting 'backup.enabled' to true in config.json")
+            return
+        
+        # Get current month for backup
+        now = datetime.now()
+        backup_month = now.strftime('%Y-%m')
+        print(f"\nCreating backups for {backup_month}...")
+        
+        # Process each emulator
+        emulators = self.config.get('emulators', {})
+        
+        if 'pcsx2' in emulators and emulators['pcsx2'].get('enabled', False):
+            nas_path = self.nas_path / 'PCSX2'
+            print(f"\nBacking up PCSX2 saves from: {nas_path}")
+            if nas_path.exists():
+                for file_path in nas_path.rglob('*'):
+                    if file_path.is_file():
+                        self._create_monthly_backup(file_path, 'PCSX2')
+        
+        if 'dolphin' in emulators and emulators['dolphin'].get('enabled', False):
+            nas_base = self.nas_path / 'Dolphin'
+            print(f"\nBacking up Dolphin saves from: {nas_base}")
+            if nas_base.exists():
+                for file_path in nas_base.rglob('*'):
+                    if file_path.is_file():
+                        self._create_monthly_backup(file_path, 'Dolphin')
+        
+        # Print summary
+        print("\n" + "=" * 60)
+        print("Backup complete!")
+        print(f"  Backed up: {self.sync_stats['backed_up']}")
+        print(f"  Errors: {self.sync_stats['errors']}")
+        print("=" * 60)
+    
+    def initialize(self) -> None:
+        """Interactive initialization for users with pre-existing saves."""
+        print("=" * 60)
+        print("RetroSaveSync - Initial Setup Wizard")
+        print("=" * 60)
+        print("\nThis wizard will help you set up RetroSaveSync with your")
+        print("existing save files.\n")
+        
+        # Check what exists
+        emulators = self.config.get('emulators', {})
+        
+        print("Scanning for existing saves...\n")
+        
+        for emu_name, emu_config in emulators.items():
+            if not emu_config.get('enabled', False):
+                continue
+            
+            if emu_name == 'pcsx2':
+                self._init_emulator_pcsx2(emu_config)
+            elif emu_name == 'dolphin':
+                self._init_emulator_dolphin(emu_config)
+        
+        print("\n" + "=" * 60)
+        print("Initialization complete!")
+        print("\nYou can now run 'python3 retrosavesync.py' to sync your saves.")
+        print("=" * 60)
+    
+    def _init_emulator_pcsx2(self, config: Dict) -> None:
+        """Initialize PCSX2 saves."""
+        local_path = Path(config['save_path']).expanduser()
+        nas_path = self.nas_path / 'PCSX2'
+        
+        local_files = set()
+        nas_files = set()
+        
+        if local_path.exists():
+            local_files = {f.relative_to(local_path) for f in local_path.rglob('*') if f.is_file()}
+        
+        if nas_path.exists():
+            nas_files = {f.relative_to(nas_path) for f in nas_path.rglob('*') if f.is_file()}
+        
+        self._init_prompt_and_sync('PCSX2', local_path, nas_path, local_files, nas_files)
+    
+    def _init_emulator_dolphin(self, config: Dict) -> None:
+        """Initialize Dolphin saves."""
+        base_path = Path(config['save_path']).expanduser()
+        nas_base = self.nas_path / 'Dolphin'
+        saves_config = config.get('saves', {})
+        
+        # Handle Wii saves
+        if 'wii' in saves_config:
+            wii_local = base_path / saves_config['wii']
+            wii_nas = nas_base / 'Wii'
+            
+            local_files = set()
+            nas_files = set()
+            
+            if wii_local.exists():
+                local_files = {f.relative_to(wii_local) for f in wii_local.rglob('*') if f.is_file()}
+            
+            if wii_nas.exists():
+                nas_files = {f.relative_to(wii_nas) for f in wii_nas.rglob('*') if f.is_file()}
+            
+            self._init_prompt_and_sync('Dolphin (Wii)', wii_local, wii_nas, local_files, nas_files)
+        
+        # Handle GameCube saves
+        if 'gamecube' in saves_config:
+            gc_local = base_path / saves_config['gamecube']
+            gc_nas = nas_base / 'GC'
+            
+            local_files = set()
+            nas_files = set()
+            
+            if gc_local.exists():
+                local_files = {f.relative_to(gc_local) for f in gc_local.rglob('*') if f.is_file()}
+            
+            if gc_nas.exists():
+                nas_files = {f.relative_to(gc_nas) for f in gc_nas.rglob('*') if f.is_file()}
+            
+            self._init_prompt_and_sync('Dolphin (GameCube)', gc_local, gc_nas, local_files, nas_files)
+    
+    def _init_prompt_and_sync(self, name: str, local_path: Path, nas_path: Path, 
+                              local_files: set, nas_files: set) -> None:
+        """Prompt user and perform initial sync for an emulator.
+        
+        Args:
+            name: Display name for the emulator (e.g., 'PCSX2', 'Dolphin (Wii)')
+            local_path: Path to local save directory
+            nas_path: Path to NAS save directory
+            local_files: Set of relative paths to local files
+            nas_files: Set of relative paths to NAS files
+        """
+        print(f"\n{name}:")
+        print(f"  Local: {local_path}")
+        print(f"  NAS:   {nas_path}")
+        
+        local_count = len(local_files)
+        nas_count = len(nas_files)
+        
+        if local_count == 0 and nas_count == 0:
+            print(f"  Status: No saves found in either location")
+            return
+        
+        print(f"  Found: {local_count} local save(s), {nas_count} NAS save(s)")
+        
+        if local_count > 0 and nas_count > 0:
+            print("\n  Both locations have saves. Choose initial sync direction:")
+            print("    1) Use local saves (upload to NAS, overwrite NAS)")
+            print("    2) Use NAS saves (download to local, overwrite local)")
+            print("    3) Smart sync (use newer files, recommended)")
+            print("    4) Skip this emulator")
+            
+            choice = None
+            while choice not in ['1', '2', '3', '4']:
+                try:
+                    choice = input("\n  Enter choice (1-4): ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n  Skipped.")
+                    return
+                
+                if choice not in ['1', '2', '3', '4']:
+                    print(f"  Invalid choice '{choice}'. Please enter 1, 2, 3, or 4.")
+            
+            if choice == '1':
+                direction = 'upload'
+                print(f"  → Will upload {local_count} file(s) to NAS")
+            elif choice == '2':
+                direction = 'download'
+                print(f"  → Will download {nas_count} file(s) from NAS")
+            elif choice == '3':
+                direction = 'auto'
+                print(f"  → Will sync based on file timestamps")
+            else:  # choice == '4'
+                print("  Skipped.")
+                return
+        elif local_count > 0:
+            print(f"  → Will upload {local_count} file(s) to NAS")
+            direction = 'upload'
+        else:
+            print(f"  → Will download {nas_count} file(s) from NAS")
+            direction = 'download'
+        
+        # Perform the sync
+        all_files = local_files | nas_files
+        
+        # Extract base emulator name for backup organization
+        # Handles formats like 'PCSX2' or 'Dolphin (Wii)' -> 'Dolphin'
+        emulator_name = name.split('(')[0].strip() if '(' in name else name
+        
+        for rel_path in sorted(all_files):
+            local_file = local_path / rel_path
+            nas_file = nas_path / rel_path
+            self._sync_file(local_file, nas_file, direction=direction, emulator=emulator_name)
 
 
 def main():
@@ -298,6 +571,16 @@ def main():
         action='store_true',
         help='Show what would be synced without actually syncing'
     )
+    parser.add_argument(
+        '--backup-only',
+        action='store_true',
+        help='Create monthly backups without syncing'
+    )
+    parser.add_argument(
+        '--init',
+        action='store_true',
+        help='Interactive setup wizard for first-time use with existing saves'
+    )
     
     args = parser.parse_args()
     
@@ -310,7 +593,11 @@ def main():
     try:
         syncer = SaveSync(args.config, dry_run=args.dry_run)
         
-        if args.emulator == 'all':
+        if args.init:
+            syncer.initialize()
+        elif args.backup_only:
+            syncer.create_backups()
+        elif args.emulator == 'all':
             syncer.sync_all()
         elif args.emulator == 'pcsx2':
             syncer.sync_pcsx2()

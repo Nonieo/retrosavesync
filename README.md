@@ -5,10 +5,12 @@ A Python tool to synchronize emulator save files between local storage and a NAS
 ## Features
 
 - **Bidirectional Sync**: Automatically uploads local saves to NAS and downloads NAS saves to local storage based on which is more recent
+- **Monthly Backups**: Optional timestamped monthly backups to preserve save file history
 - **PCSX2 Support**: Sync PS2 memory card files
 - **Dolphin Support**: Sync Wii and GameCube save files
 - **Configurable**: Easy JSON configuration for paths and emulator settings
 - **Safe**: Preserves file timestamps and only syncs when necessary
+- **Organized Structure**: Clear directory organization on NAS for easy browsing
 
 ## Requirements
 
@@ -29,6 +31,26 @@ chmod +x retrosavesync.py quickstart.sh
 ```
 
 ## Quick Start
+
+### First-Time Setup with Existing Saves
+
+If you already have save files on your local system or NAS, use the initialization wizard:
+
+```bash
+# 1. Create your configuration
+cp config.example.json config.json
+# Edit config.json with your paths
+
+# 2. Run the interactive setup wizard
+python3 retrosavesync.py --init
+```
+
+The wizard will:
+- Detect existing saves on both local and NAS locations
+- Let you choose which saves to use as the baseline
+- Perform the initial sync based on your preferences
+
+### Interactive Quick Start
 
 For an interactive setup and sync experience, run:
 ```bash
@@ -52,6 +74,11 @@ cp config.example.json config.json
 ```json
 {
   "nas_path": "/path/to/nas/retro_saves",
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  },
   "emulators": {
     "pcsx2": {
       "enabled": true,
@@ -74,6 +101,10 @@ cp config.example.json config.json
 ### Configuration Options
 
 - **nas_path**: Path to your NAS or network share where saves will be stored
+- **backup**: Optional backup configuration
+  - **enabled**: Set to `true` to enable monthly backups (default: false)
+  - **monthly_backups**: Set to `true` to create timestamped monthly backups (default: true)
+  - **backup_path**: Subdirectory for backups relative to nas_path (default: "backups")
 - **emulators**: Dictionary of emulator configurations
   - **enabled**: Set to `true` to enable syncing for this emulator
   - **save_path**: Path to the emulator's save directory
@@ -115,6 +146,19 @@ python3 retrosavesync.py -e dolphin
 python3 retrosavesync.py -c /path/to/config.json
 ```
 
+### First-Time Initialization
+
+Use the interactive wizard when setting up for the first time with existing saves:
+
+```bash
+python3 retrosavesync.py --init
+```
+
+This will:
+- Scan for existing saves on local and NAS
+- Ask which location to use as the baseline
+- Perform initial sync based on your choice
+
 ### Dry Run Mode
 
 Test your configuration without making any changes:
@@ -128,6 +172,56 @@ python3 retrosavesync.py --dry-run
 - `-c, --config`: Path to configuration file (default: config.json)
 - `-e, --emulator`: Emulator to sync - choices: all, pcsx2, dolphin (default: all)
 - `--dry-run`: Show what would be synced without actually syncing
+- `--backup-only`: Create monthly backups without syncing
+- `--init`: Interactive setup wizard for first-time use with existing saves
+
+### Monthly Backups
+
+When enabled in configuration, RetroSaveSync automatically creates monthly backups of your NAS saves before overwriting them:
+
+```bash
+# Enable backups in config.json
+{
+  "backup": {
+    "enabled": true,
+    "monthly_backups": true,
+    "backup_path": "backups"
+  }
+}
+
+# Backups are created automatically during sync
+python3 retrosavesync.py
+
+# Or create backups manually without syncing
+python3 retrosavesync.py --backup-only
+```
+
+Backups are organized by year-month and emulator:
+```
+/path/to/nas/retro_saves/
+├── PCSX2/              # Current saves
+│   ├── Mcd001.ps2
+│   └── Mcd002.ps2
+├── Dolphin/            # Current saves
+│   ├── Wii/
+│   └── GC/
+└── backups/            # Monthly backups
+    ├── 2025-12/
+    │   ├── PCSX2/
+    │   │   ├── Mcd001.ps2
+    │   │   └── Mcd002.ps2
+    │   └── Dolphin/
+    │       ├── Wii/
+    │       └── GC/
+    └── 2026-01/
+        └── ...
+```
+
+**Key Points:**
+- One backup per file per month is created automatically
+- Backups are only created when a file is about to be overwritten
+- Backups preserve the full directory structure
+- Old backups are never automatically deleted - manage them manually
 
 ## How It Works
 
@@ -149,6 +243,7 @@ RetroSaveSync - Starting synchronization
 Syncing PCSX2 saves:
   Local: /home/user/.config/PCSX2/memcards
   NAS: /mnt/nas/retro_saves/PCSX2
+  💾 Backed up: Mcd001.ps2 -> backups/2025-12/
   ↑ Uploaded: Mcd001.ps2
   ↓ Downloaded: Mcd002.ps2
 
@@ -157,6 +252,7 @@ Syncing Dolphin saves:
   NAS: /mnt/nas/retro_saves/Dolphin
 
   Wii saves:
+  💾 Backed up: MarioKart.bin -> backups/2025-12/
   ↑ Uploaded: MarioKart.bin
 
   GameCube saves:
@@ -167,6 +263,7 @@ Synchronization complete!
   Uploaded: 2
   Downloaded: 2
   Skipped: 5
+  Backed up: 2
   Errors: 0
 ============================================================
 ```
@@ -195,9 +292,12 @@ crontab -e
 ## Safety Notes
 
 - The tool uses file modification times to determine which version is newer
-- Original files are overwritten when a newer version is found
-- Consider backing up your saves before first use
+- When backups are enabled, original NAS files are backed up before being overwritten
+- Monthly backups are created automatically (one per file per month)
+- Local files are overwritten during download without backup
+- Consider backing up your local saves separately before first use
 - Test with a few save files first to ensure paths are configured correctly
+- Use `--dry-run` to preview changes before syncing
 
 ## Troubleshooting
 
